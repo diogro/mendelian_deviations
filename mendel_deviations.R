@@ -1,35 +1,68 @@
 chrs <- read.csv('data/genotypes/chrom1.csv')
+pedigree <- read.csv('data/F3_pedigree.csv')
+families <- split(pedigree, list(pedigree$Dam, pedigree$Sire), drop=T)
+ngenes = 31
 
-multi_prob <- list(LLSS = c(0, 0, 1, 0), SSLL = c(0, 1, 0, 0),
+multi.prob <- list(LLSS = c(0, 0, 1, 0), SSLL = c(0, 1, 0, 0),
                    SLLL = c(0, 1, 0, 1), LSLL = c(0, 1, 0, 1),
+                   SLSL = c(1, 1, 1, 1), SSSL = c(1, 1, 0, 0),
                    SLSL = c(1, 1, 1, 1), SSSL = c(1, 1, 0, 0),
                    LLLL = c(0, 0, 0, 1), SSSS = c(1, 0, 0, 0))
 
-calc_code <- function(x) {
+calc.code <- function(x, ret.vector=F) {
     if (x[1] == 1) {
-        return('SS')
+        if (!ret.vector) {
+            return('SS')
+        } else {
+            return(c(1,0,0,0))
+        }
     }
 
-    if (x[1 == -1]) {
-        return('LL')
+    if (x[1] == -1) {
+        if (!ret.vector) {
+            return('LL')
+        } else {
+            return(c(0,0,0,1))
+        }
     }
 
     if (x[2] == 1) {
         if (x[3] == 1) {
-            return('SL')
+            if (!ret.vector) {
+                return('SL')
+            } else {
+                return(c(0,1,0,0))
+            }
         } else {
-            return('LS')
+            if (!ret.vector) {
+                return('LS')
+            } else {
+                return(c(0,0,1,0))
+            }
         }
     }
 }
 
-prob_family <- function(parent, mother, sons) {
-    parent_code <- calc_code(parent)
-    mother_code <- calc_code(mother)
-    parents_code <- paste(parent_code, mother_code, sep="")
-    classes_prob <- multi_prob[parents_code]
-
-#   sons_classes <- MAGIC
-
-    return dmultinom(x=sons_classes, prob=classes_prob)
+gene.cols <- function(id, gene) {
+    gene.col <- c(paste("A", gene, sep=""), paste("D", gene, sep=""), paste("I", gene, sep=""))
+    return (chrs[chrs$ID == id, gene.col])
 }
+
+families.probs <- llply(names(families), function(n) {
+    parents <- strsplit(n, "\\.")[[1]]
+    sire.id <- as.numeric(parents[1])
+    dame.id <-  as.numeric(parents[2])
+
+    return (llply(1:ngenes, function (g) {
+                gene.col <- c(paste("A", g, sep=""), paste("D", g, sep=""), paste("I", g, sep=""))
+                sire.gene <- chrs[chrs$ID == sire.id, gene.col]
+                dame.gene <- chrs[chrs$ID == dame.id, gene.col]
+                sire.code <- calc.code(sire.gene)
+                dame.code <- calc.code(dame.gene)
+                parents.code <- paste(sire.code, dame.code, sep="")
+                print(parents.code)
+                classes.prob <- multi.prob[[parents.code]]
+                sons.classes <- Reduce("+", llply(families[[n]]$ID, function (id) calc.code(gene.cols(id, g), ret.vector=T)))
+                return(dmultinom(x=sons.classes, prob=classes.prob))
+    }))
+})
