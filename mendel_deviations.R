@@ -1,11 +1,13 @@
 library(plyr)
 
-chrs <- read.csv('data/genotypes/chrom1.csv')
+chrs <- read.csv('data/genotypes/chrom3.csv')
 pedigree <- read.csv('data/F3_pedigree.csv')
 families <- split(pedigree, list(pedigree$Dam, pedigree$Sire), drop=T)
-ngenes = 31
+nlocus = 31
 
-multi.prob <- list(LLSS = c(0, 0, 1, 0), SSLL = c(0, 1, 0, 0),
+chrs <- chrs[!(chrs$ID == 3311 | chrs$ID == 2833),]
+
+multi_prob <- list(LLSS = c(0, 0, 1, 0), SSLL = c(0, 1, 0, 0),
                    SLLL = c(0, 1, 0, 1), LSLL = c(0, 1, 0, 1),
                    SLSL = c(1, 1, 1, 1), SSSL = c(1, 1, 0, 0),
                    LSSL = c(1, 1, 1, 1), SSLS = c(1, 1, 0, 0),
@@ -15,9 +17,9 @@ multi.prob <- list(LLSS = c(0, 0, 1, 0), SSLL = c(0, 1, 0, 0),
                    LSSS = c(1, 0, 1, 0), LLSL = c(0, 0, 1, 1),
                    LLSL = c(0, 0, 1, 1), LLLS = c(0, 0, 1, 1))
 
-calc.code <- function(x, ret.vector=F) {
+calc_code <- function(x, ret_vector=F) {
     if (x[1] == 1) {
-        if (!ret.vector) {
+        if (!ret_vector) {
             return('SS')
         } else {
             return(c(1,0,0,0))
@@ -25,7 +27,7 @@ calc.code <- function(x, ret.vector=F) {
     }
 
     if (x[1] == -1) {
-        if (!ret.vector) {
+        if (!ret_vector) {
             return('LL')
         } else {
             return(c(0,0,0,1))
@@ -34,13 +36,13 @@ calc.code <- function(x, ret.vector=F) {
 
     if (x[2] == 1) {
         if (x[3] == 1) {
-            if (!ret.vector) {
+            if (!ret_vector) {
                 return('SL')
             } else {
                 return(c(0,0,1,0))
             }
         } else {
-            if (!ret.vector) {
+            if (!ret_vector) {
                 return('LS')
             } else {
                 return(c(0,1,0,0))
@@ -49,34 +51,41 @@ calc.code <- function(x, ret.vector=F) {
     }
 }
 
-gene.cols <- function(id, gene) {
-    gene.col <- c(paste("A", gene, sep=""), paste("D", gene, sep=""), paste("I", gene, sep=""))
-    return (chrs[chrs$ID == id, gene.col])
+calc_locus_cols <- function(id, locus) {
+    locus_col <- c(paste0("A", locus), paste0("D", locus), paste0("I", locus))
+    return (chrs[chrs$ID == id, locus_col])
 }
 
-calc_family_prob <- function(g, family, sire.id, dame.id) {
-    gene.col <- c(paste("A", g, sep=""), paste("D", g, sep=""), paste("I", g, sep=""))
-    sire.gene <- chrs[chrs$ID == sire.id, gene.col]
-    dame.gene <- chrs[chrs$ID == dame.id, gene.col]
-    sire.code <- calc.code(sire.gene)
-    dame.code <- calc.code(dame.gene)
-    parents.code <- paste(sire.code, dame.code, sep="")
-    classes.prob <- multi.prob[[parents.code]]
-    sons.classes <- Reduce("+", llply(family$ID, function (id) calc.code(gene.cols(id, g), ret.vector=T)))
-    return(dmultinom(x=sons.classes, prob=classes.prob, log=T))
+calc_family_prob <- function(g, family, sire_id, dame_id) {
+    locus_col <- c(paste0("A", g), paste0("D", g), paste0("I", g))
+    sire_locus <- chrs[chrs$ID == sire_id, locus_col]
+    dame_locus <- chrs[chrs$ID == dame_id, locus_col]
+    sire_code <- calc_code(sire_locus)
+    dame_code <- calc_code(dame_locus)
+    parents_code <- paste(sire_code, dame_code, sep="")
+    classes_prob <- multi_prob[[parents_code]]
+    sons_classes <- Reduce("+", llply(family$ID, function (id) calc_code(calc_locus_cols(id, g), ret_vector=T)))
+    return(dmultinom(x=sons_classes, prob=classes_prob, log=T))
 }
 
-families.probs <- llply(names(families), function(n) {
+families_probs <- llply(names(families), function(n) {
     parents <- strsplit(n, "\\.")[[1]]
-    sire.id <- as.numeric(parents[1])
-    dame.id <-  as.numeric(parents[2])
+    sire_id <- as.numeric(parents[1])
+    dame_id <-  as.numeric(parents[2])
     family <- chrs[chrs$ID %in% families[[n]]$ID,]
 
     if (dim(family)[1] == 0) {
         return(NA)
     }
 
-    return (aaply(1:ngenes, 1, calc_family_prob, family, sire.id, dame.id))
+    return (aaply(1:nlocus, 1, calc_family_prob, family, sire_id, dame_id))
 })
 
-names(families.probs) <- names(families)
+names(families_probs) <- names(families)
+families_probs <- families_probs[!is.na(families_probs)]
+df_probs <- ldply(families_probs)
+#library(ggplot2)
+#library(reshape2)
+#m_probs <- melt(df_probs)
+#names(m_probs)
+#ggplot(m_probs, aes(value, group = _id)) + geom_histogram() + facet_wrap(~_id)
