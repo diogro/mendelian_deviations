@@ -88,6 +88,11 @@ runCromossome <- function(cromossome){
     return(families_probs)
 }
 families_probs <- runCromossome(2)
+chrs <- mouse_gen[[2]]
+fuck_up <- names(families_probs[!laply(families_probs, function(x) all(is.finite(x)))])
+fuck_up[[1]]
+
+
 
 df_probs <- ldply(families_probs)
 m_probs <- melt(df_probs)
