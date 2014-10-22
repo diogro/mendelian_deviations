@@ -7,8 +7,6 @@ source('./read_mouse_data.R')
 pedigree <- read.csv('data/F3_pedigree.csv')
 families <- split(pedigree, list(pedigree$Dam, pedigree$Sire), drop=T)
 
-mouse_gen[[1]] <- mouse_gen[[1]][!(mouse_gen[[1]]$ID == 3311 | mouse_gen[[1]]$ID == 2833),]
-
 multi_prob <- list(LLSS = c(0, 0, 1, 0), SSLL = c(0, 1, 0, 0),
                    SLLL = c(0, 1, 0, 1), LSLL = c(0, 1, 0, 1),
                    SLSL = c(1, 1, 1, 1), SSSL = c(1, 1, 0, 0),
@@ -84,21 +82,27 @@ get_family_prob <- function(current_family, chrs, nlocus) {
     return (aaply(1:nlocus, 1, calc_litter_prob, family$litter, family$sire, family$dame, chrs))
 }
 
+re_calc_impossible <- function(fuck_up_id, nlocus){
+    family = get_family(fuck_up_id, chrs)
+    good_litter <- aaply(1:dim(family$litter)[1], 1, function(ind) all(is.finite(aaply(1:nlocus, 1, calc_litter_prob, family$litter[ind,], family$sire, family$dame, chrs))))
+    aaply(1:nlocus, 1, calc_litter_prob, family$litter[good_litter,], family$sire, family$dame, chrs)
+}
+
 runCromossome <- function(cromossome){
     chrs <- mouse_gen[[cromossome]]
     nlocus = (length(chrs)-1)/3
     families_probs <- llply(names(families), get_family_prob, chrs, nlocus)
     names(families_probs) <- names(families)
     families_probs <- families_probs[!is.na(families_probs)]
+    fuck_up <- names(families_probs[!laply(families_probs, function(x) all(is.finite(x)))])
+    #TODO: if() nao tenha ninguem zoado
+    families_probs[fuck_up] <- llply(fuck_up, re_calc_impossible, nlocus)
     return(families_probs)
 }
 
-families_probs <- runCromossome(2)
-chrs <- mouse_gen[[2]]
-fuck_up <- names(families_probs[!laply(families_probs, function(x) all(is.finite(x)))])
-x = get_family(fuck_up[[1]], chrs)
-
-
+families_probs <- runCromossome(3)
+chrs <- mouse_gen[[3]]
+fuck_up_id <- fuck_up[[1]]
 
 df_probs <- ldply(families_probs)
 m_probs <- melt(df_probs)
