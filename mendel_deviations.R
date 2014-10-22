@@ -27,7 +27,6 @@ calc_code <- function(x, ret_vector=F) {
             return(c(1,0,0,0))
         }
     }
-
     if (x[1] == -1) {
         if (!ret_vector) {
             return('LL')
@@ -35,7 +34,6 @@ calc_code <- function(x, ret_vector=F) {
             return(c(0,0,0,1))
         }
     }
-
     if (x[2] == 1) {
         if (x[3] == 1) {
             if (!ret_vector) {
@@ -58,7 +56,7 @@ calc_locus_cols <- function(id, locus, chrs) {
     return (chrs[chrs$ID == id, locus_col])
 }
 
-calc_family_prob <- function(g, family, sire_id, dame_id, chrs) {
+calc_litter_prob <- function(g, litter, sire_id, dame_id, chrs) {
     locus_col <- c(paste0("A", g), paste0("D", g), paste0("I", g))
     sire_locus <- chrs[chrs$ID == sire_id, locus_col]
     dame_locus <- chrs[chrs$ID == dame_id, locus_col]
@@ -66,31 +64,39 @@ calc_family_prob <- function(g, family, sire_id, dame_id, chrs) {
     dame_code <- calc_code(dame_locus)
     parents_code <- paste(sire_code, dame_code, sep="")
     classes_prob <- multi_prob[[parents_code]]
-    sons_classes <- Reduce("+", llply(family$ID, function (id) calc_code(calc_locus_cols(id, g, chrs), ret_vector=T)))
+    sons_classes <- Reduce("+", llply(litter$ID, function (id) calc_code(calc_locus_cols(id, g, chrs), ret_vector=T)))
     return(dmultinom(x=sons_classes, prob=classes_prob, log=T))
+}
+
+get_family <- function(current_family, chrs){
+    parents <- strsplit(current_family, "\\.")[[1]]
+    sire <- as.numeric(parents[1])
+    dame <- as.numeric(parents[2])
+    litter  <- chrs[chrs$ID %in% families[[current_family]]$ID,]
+    list(litter = litter, sire = sire, dame = dame)
+}
+
+get_family_prob <- function(current_family, chrs, nlocus) {
+    family <- get_family(current_family, chrs)
+    if (dim(family$litter)[1] == 0) {
+        return(NA)
+    }
+    return (aaply(1:nlocus, 1, calc_litter_prob, family$litter, family$sire, family$dame, chrs))
 }
 
 runCromossome <- function(cromossome){
     chrs <- mouse_gen[[cromossome]]
     nlocus = (length(chrs)-1)/3
-    families_probs <- llply(names(families), function(current_family, chrs) {
-                            parents <- strsplit(current_family, "\\.")[[1]]
-                            sire_id <- as.numeric(parents[1])
-                            dame_id <- as.numeric(parents[2])
-                            family  <- chrs[chrs$ID %in% families[[current_family]]$ID,]
-                            if (dim(family)[1] == 0) {
-                                return(NA)
-                            }
-                            return (aaply(1:nlocus, 1, calc_family_prob, family, sire_id, dame_id, chrs))
-                   }, chrs)
+    families_probs <- llply(names(families), get_family_prob, chrs, nlocus)
     names(families_probs) <- names(families)
     families_probs <- families_probs[!is.na(families_probs)]
     return(families_probs)
 }
+
 families_probs <- runCromossome(2)
 chrs <- mouse_gen[[2]]
 fuck_up <- names(families_probs[!laply(families_probs, function(x) all(is.finite(x)))])
-fuck_up[[1]]
+x = get_family(fuck_up[[1]], chrs)
 
 
 
