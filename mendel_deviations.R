@@ -109,13 +109,19 @@ runCromossome <- function(cromossome){
 }
 
 
-families_probs <- llply(names(mouse_gen), runCromossome, .parallel = TRUE)
-names(families_probs) <- names(mouse_gen)
-df_probs = llply(names(families_probs), function(df) data.frame(ldply(families_probs[[df]]), chrom = df))
-names(df_probs) <- names(families_probs)
-m_probs = ldply(df_probs, function(x) melt(x , id.vars = c('.id', 'chrom')))
-m_probs <- m_probs %>% mutate(chrom_loci = paste(chrom, variable, sep = '_'))
-m_probs$chrom_loci <- factor(m_probs$chrom_loci, levels = unique(m_probs$chrom_loci))
-names(m_probs) <- c('sire.dame', 'chromosome', 'loci', 'log_probability', 'chrom_loci')
-ggplot(m_probs, aes(chrom_loci, log_probability, group = chrom_loci, color = chromosome)) + geom_jitter()
-write.csv(m_probs, 'mendelian_deviations.csv', row.names =  FALSE)
+#families_probs <- llply(names(mouse_gen), runCromossome, .parallel = TRUE)
+#names(families_probs) <- names(mouse_gen)
+#df_probs = llply(names(families_probs), function(df) data.frame(ldply(families_probs[[df]]), chrom = df))
+#names(df_probs) <- names(families_probs)
+#m_probs = ldply(df_probs, function(x) melt(x , id.vars = c('.id', 'chrom')))
+#m_probs <- m_probs %>% mutate(chrom_loci = paste(chrom, variable, sep = '_'))
+#m_probs$chrom_loci <- factor(m_probs$chrom_loci, levels = unique(m_probs$chrom_loci))
+#names(m_probs) <- c('sire.dame', 'chromosome', 'loci', 'log_probability', 'chrom_loci')
+#write.csv(m_probs, 'mendelian_deviations.csv', row.names =  FALSE)
+m_probs <- read.csv('./data/mendelian_deviations.csv')
+
+ggplot(filter(m_probs, log_probability < -2), aes(chrom_loci, log_probability, group = chrom_loci, color = chromosome)) + geom_jitter()+ theme_bw()
+ggplot(filter(m_probs, log_probability < -2), aes(-log_probability, group = chrom_loci)) + geom_histogram() + facet_wrap(~chromosome) + theme_bw()
+
+perfamily <- filter(m_probs, log_probability < -1.5)[,c(1, 4)] %>% ddply(~sire.dame, numcolwise( mean))
+qplot(-log_probability, data = perfamily, geom = 'histogram') + theme_bw()
